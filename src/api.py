@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .rag import generate_answer
 
@@ -11,9 +11,9 @@ app = FastAPI(
 )
 
 
-class QuestionRequest(BaseModel):
+class AskRequest(BaseModel):
     question: str
-
+    history: list[dict] = Field(default_factory=list)
 
 @app.get("/")
 def root():
@@ -23,10 +23,11 @@ def root():
 
 
 @app.post("/ask")
-def ask_question(request: QuestionRequest):
+def ask_question(request: AskRequest):
 
     answer, results = generate_answer(
-        request.question
+        request.question, 
+        request.history
     )
 
     sources = list(
@@ -36,8 +37,20 @@ def ask_question(request: QuestionRequest):
         )
     )
 
+    retrieved_chunks = []
+
+    for i, metadata in enumerate(results["metadatas"][0]):
+
+        retrieved_chunks.append({
+            "source": metadata["source"],
+            "vector_distance": results["distances"][0][i],
+            "reranker_score": results["reranker_scores"][0][i],
+            "content": results["documents"][0][i]
+        })
+
     return {
         "question": request.question,
         "answer": answer,
-        "sources": sources
+        "sources": sources,
+        "retrieved_chunks": retrieved_chunks
     }

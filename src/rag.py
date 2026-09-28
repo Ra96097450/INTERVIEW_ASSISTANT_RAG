@@ -1,13 +1,13 @@
 import os
 
+from dotenv import load_dotenv
 from groq import Groq
 
-from .retriever import search
+from retriever import search
 
+load_dotenv()
 
-client = Groq(
-    api_key=os.getenv("GROQ_API_KEY")
-)
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 
 def build_prompt(query, retrieved_chunks):
@@ -35,10 +35,74 @@ Answer:
 
     return prompt
 
+def rewrite_query(query, history):
 
-def generate_answer(query):
+    if not history:
+        return query
 
-    results = search(query, top_k=3)
+    conversation = ""
+
+    for message in history[-6:]:
+        conversation += (
+            f"{message['role']}: "
+            f"{message['content']}\n"
+        )
+
+    prompt = f"""
+You are a query rewriting system for a RAG application.
+
+Rewrite the user's latest question into a standalone question
+that can be understood without the conversation history.
+
+Do not answer the question.
+Do not add information that is not present.
+Return ONLY the rewritten question.
+
+Conversation:
+{conversation}
+
+Latest question:
+{query}
+
+Standalone question:
+"""
+
+    response = client.chat.completions.create(
+        model="openai/gpt-oss-20b",
+        messages=[
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        temperature=0
+    )
+
+    return response.choices[0].message.content.strip()
+
+
+def generate_answer(query, history=None):
+
+    if history is None:
+        history = []
+
+    rewritten_query = rewrite_query(
+        query,
+        history
+    )
+
+    results = search(
+    rewritten_query,
+    top_k=3
+    )
+    
+    if not results["documents"][0]:
+
+        return (
+            "I don't have enough information in the knowledge base.",
+            results
+        )
+
 
     retrieved_chunks = results["documents"][0]
 
@@ -65,17 +129,26 @@ def generate_answer(query):
 
 if __name__ == "__main__":
 
-    query =  "What is the architecture of a Kubernetes cluster?"
+    history = [
+        {
+            "role": "user",
+            "content": "What is gradient descent?"
+        },
+        {
+            "role": "assistant",
+            "content": "Gradient descent is an optimization algorithm used to minimize a loss function."
+        }
+    ]
 
-    answer, results = generate_answer(query)
+    query = "Why does it reduce the loss?"
 
-    print("\nQUESTION:")
+    rewritten = rewrite_query(
+        query,
+        history
+    )
+
+    print("\nOriginal query:")
     print(query)
 
-    print("\nANSWER:")
-    print(answer)
-
-    print("\nSOURCES:")
-
-    for metadata in results["metadatas"][0]:
-        print("-", metadata["source"])
+    print("\nRewritten query:")
+    print(rewritten)

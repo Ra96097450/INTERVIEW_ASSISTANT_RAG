@@ -13,44 +13,82 @@ st.set_page_config(
 
 
 st.title("🤖 InterviewIQ")
-st.subheader("AI Engineer Knowledge Assistant")
+st.caption("AI Engineer Knowledge Assistant")
 
-st.write(
-    "Ask questions about Python, DSA, Machine Learning, "
-    "RAG, Databases, and AI Engineering."
+
+# Initialize chat history
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+
+# Display previous messages
+for message in st.session_state.messages:
+
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+
+# Chat input
+question = st.chat_input(
+    "Ask something about Python, ML, RAG, DSA..."
 )
 
 
-question = st.text_input(
-    "Ask your question:",
-    placeholder="e.g. How does gradient descent update model weights?"
-)
+if question:
+
+    # Display user message
+    with st.chat_message("user"):
+        st.markdown(question)
+
+    st.session_state.messages.append({
+        "role": "user",
+        "content": question
+    })
 
 
-if st.button("Ask InterviewIQ"):
+    # Call backend
+    with st.chat_message("assistant"):
 
-    if not question.strip():
-        st.warning("Please enter a question.")
+        with st.spinner("Searching knowledge base..."):
 
-    else:
-        with st.spinner("Thinking..."):
+            try:
 
-            response = requests.post(
-                API_URL,
-                json={"question": question}
-            )
+                response = requests.post(
+                    API_URL,
+                    json={"question": question},
+                    timeout=60
+                )
 
-        if response.status_code == 200:
+                response.raise_for_status()
 
-            data = response.json()
+                data = response.json()
 
-            st.markdown("### 💡 Answer")
-            st.write(data["answer"])
+                answer = data["answer"]
+                sources = data["sources"]
 
-            st.markdown("### 📚 Sources")
 
-            for source in data["sources"]:
-                st.write(f"- {source}")
+                # Answer
+                st.markdown(answer)
 
-        else:
-            st.error("Something went wrong with the API.")
+
+                # Sources
+                if sources:
+
+                    st.markdown("**Sources:**")
+
+                    for source in sources:
+                        st.caption(f"📄 {source}")
+
+
+                # Save assistant response
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": answer
+                })
+
+
+            except requests.exceptions.RequestException as e:
+
+                st.error(
+                    f"Could not connect to the RAG API: {e}"
+                )
