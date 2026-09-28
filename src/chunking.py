@@ -5,6 +5,7 @@ def chunk_text(text, chunk_size=500):
 
     paragraphs = text.split("\n\n")
 
+
     chunks = []
     current_chunk = ""
 
